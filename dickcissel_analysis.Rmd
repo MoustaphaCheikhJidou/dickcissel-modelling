@@ -1,0 +1,682 @@
+---
+title: >
+  </div>
+  <div style="text-align: center;">
+    <br>
+    Modélisation des facteurs influençant l'abondance des dickcissels<br><br>
+    <img src="https://media.licdn.com/dms/image/v2/C4E0BAQGYBmRCN7M_JA/company-logo_200_200/company-logo_200_200/0/1630581857994?e=2147483647&amp;v=beta&amp;t=e4N2KtKFW8ieFFhgkPwXPqZYxpGDW_pZLRnXXs_ofko" alt="Logo" style="height: 60px; margin-bottom: 10px;" />
+author: "EL Moustapha JIDDOU"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    keep_md: no
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+    theme: cerulean
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+<style>
+  h1.title {
+    text-align: center;
+  }
+  h4.author {
+    text-align: center;
+  }
+  h4.date {
+    text-align: center;
+  }
+</style>
+
+
+
+# .Résumé
+
+Ce rapport examine les facteurs influençant l'abondance des dickcissels à l'aide d'une régression linéaire multiple. À partir d'un ensemble de données environnementales, nous identifions les variables explicatives pertinentes. Une analyse descriptive et une modélisation statistique sont présentées pour interpréter les résultats.
+
+
+# .Introduction
+
+
+### .Problématique
+L'abondance des dickcissels est influencée par plusieurs facteurs environnementaux, tels que les conditions climatiques et les caractéristiques de leur habitat. Comprendre ces relations est crucial pour préserver cette espèce et anticiper les impacts des changements environnementaux.
+
+### .Objectifs
+- Identifier les variables environnementales ayant un impact significatif sur l'abondance des dickcissels.
+- Modéliser la relation entre ces variables et l'abondance en utilisant une régression linéaire multiple.
+- Fournir des recommandations basées sur les résultats pour mieux gérer les habitats naturels de ces oiseaux.
+
+# .Description des données
+
+Le jeu de données dickcissel utilisé contient 646 observations et 15 variables principales. Voici une description des variables incluses dans l'étude.
+
+| **Nom de la variable** | **Description**                                                       | **Type**      |
+|-------------------------|-----------------------------------------------------------------------|---------------|
+| `abund`                | Abondance des dickcissels (nombre d'individus observés).             | Numérique     |
+| `Present`              | Présence ou absence des dickcissels dans la zone observée.           | Catégorique   |
+| `clDD`                 | Degré-jour cumulatif pour le climat.                                 | Numérique     |
+| `clFD`                 | Nombre de jours de gel.                                              | Numérique     |
+| `clTmi`                | Température minimale moyenne (°C).                                   | Numérique     |
+| `clTma`                | Température moyenne maximale (°C).                                   | Numérique     |
+| `clTmn`                | Température moyenne minimale (°C).                                   | Numérique     |
+| `clP`                  | Précipitations moyennes cumulées (mm).                               | Numérique     |
+| `NDVI`                 | Indice de végétation normalisé (NDVI).                               | Numérique     |
+| `broadleaf`            | Proportion de la couverture par les forêts feuillues.                | Numérique     |
+| `conif`                | Proportion de la couverture par les conifères.                       | Numérique     |
+| `grass`                | Proportion de la couverture par les herbes.                          | Numérique     |
+| `crop`                 | Proportion de la couverture par les cultures.                        | Numérique     |
+| `urban`                | Proportion de la couverture par les zones urbaines.                  | Numérique     |
+| `wetland`              | Proportion de la couverture par les zones humides.                   | Numérique     |
+
+Cette table décrit toutes les variables disponibles dans le jeu de données avec leurs types et significations. Elle constitue la base pour l'analyse univariée et les modèles statistiques dans les sections suivantes.
+
+
+# .Analyse univariée
+### .Les données utilisées comprennent 646 observations avec 15 variables principales : 7 variables climatiques, 7 paysagères et 1 variable dépendante, l’abondance (abund). Une analyse univariée a permis de décrire les caractéristiques de chaque variable, en visualisant leur distribution et leurs tendances. Les résultats montrent des variabilités importantes, notamment dans les précipitations (clP) et l’indice de végétation (NDVI).
+
+
+## .Library nécessaire
+```{r}
+library(ggplot2)
+library(dplyr)
+library(naniar)
+library(e1071)
+library(GGally)
+library(corrplot)
+library(ggcorrplot)
+library(car)
+library(vegan)
+library(MASS)
+library(RColorBrewer)
+library(broom)
+library(gridExtra)
+# Vérification automatique des paquets manquants
+required_packages <- c("ggplot2", "dplyr", "naniar", "e1071", "GGally", "corrplot", "ggcorrplot", "car", "vegan", "MASS", "RColorBrewer", "broom", "gridExtra")
+installed_packages <- rownames(installed.packages())
+missing_packages <- setdiff(required_packages, installed_packages)
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+```
+## .Chargement et Préparation des Données
+```{r}
+# Vérifier que le fichier existe avant de charger
+if (file.exists("dickcissel.csv")) {
+  Dickcissel <- read.csv("dickcissel.csv")
+  # Vérifier la structure et le résumé des données
+  str(Dickcissel)
+  summary(Dickcissel)
+} else {
+  stop("Le fichier 'dickcissel.csv' est introuvable dans le répertoire de travail.")
+}
+```
+### .Distributions des variable quantitative
+```{r}
+
+# Identifier les variables numériques
+num_vars <- c("abund", "clDD", "clFD", "clTmi", "clTma", "clTmn", "clP", "NDVI", "broadleaf", "conif", "grass", "crop", "urban", "wetland")
+palette_colors <- brewer.pal(n = min(length(num_vars), 12), name = "Paired")
+
+# Boucle pour créer des histogrammes
+for (i in seq_along(num_vars)) {
+  col <- num_vars[i]
+  print(
+    ggplot(Dickcissel, aes_string(x = col)) +
+      geom_histogram(
+        aes(y = ..density..),
+        bins = 30,
+        fill = palette_colors[i %% length(palette_colors) + 1],
+        color = "black",
+        alpha = 0.7
+      ) +
+      geom_vline(
+        aes_string(xintercept = paste("mean(", col, ", na.rm = TRUE)")),
+        color = "brown",
+        linetype = "dashed",
+        linewidth = 1
+      ) +
+      geom_density(
+        color = palette_colors[i %% length(palette_colors) + 1],
+        linewidth = 1,
+        adjust = 1
+      ) +
+      labs(
+        title = paste("Histogramme de", col),
+        x = col,
+        y = "Densité"
+      ) +
+      theme_minimal(base_size = 15) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12)
+      )
+  )
+}
+
+```
+Les histogrammes des variables étudiées révèlent des distributions variées. Certaines variables, comme `clDD`, `clTmi`, et `clTma`, présentent des distributions symétriques ou proches de la normale, ce qui les rend directement adaptées aux analyses linéaires. D'autres, comme `abund`, `broadleaf`, `grass`, et `urban`, montrent des asymétries marquées avec des valeurs fortement concentrées près de zéro, suggérant la nécessité de transformations (par exemple, logarithmiques) pour améliorer leur normalité. Les variables catégoriques et certaines variables numériques, telles que `crop`, affichent des répartitions spécifiques avec des pics distincts qui reflètent des caractéristiques régionales ou structurelles. En résumé, les données présentent une diversité de distributions, et un prétraitement est essentiel pour certaines variables avant leur intégration dans des modèles statistiques.
+
+## .Statistiques descriptives générales (pour les variables numériques)
+```{r}
+# Sélection des variables numériques
+num_vars <- c("abund", "clDD", "clFD", "clTmi", "clTma", "clTmn", "clP", 
+              "NDVI", "broadleaf", "conif", "grass", "crop", "urban", "wetland")
+
+# Calcul des statistiques descriptives
+stat_desc <- Dickcissel[, num_vars] %>%
+  summarise(across(
+    everything(),
+    list(
+      Moyenne = ~mean(., na.rm = TRUE),
+      Médiane = ~median(., na.rm = TRUE),
+      Minimum = ~min(., na.rm = TRUE),
+      Maximum = ~max(., na.rm = TRUE),
+      Ecart_Type = ~sd(., na.rm = TRUE)
+    )
+  ))
+
+# Afficher les résultats
+print(stat_desc)
+```
+Les statistiques descriptives globales montrent une grande diversité dans les distributions des variables. La variable `abund` (abondance) a une moyenne de 10,11 avec une médiane de 0,2, indiquant une distribution asymétrique fortement concentrée sur des valeurs faibles. Les variables climatiques comme `clDD` (degré-jour cumulatif) et `clFD` (jours de gel) ont des moyennes de 4410,67 et 115,08 respectivement, avec des écarts-types élevés, reflétant une grande variabilité. La température minimale (`clTmi`), maximale (`clTma`), et moyenne minimale (`clTmn`) présentent des valeurs moyennes modérées autour de 4,03 °C, 30,69 °C, et 12,06 °C, suggérant des conditions climatiques équilibrées dans les régions étudiées.
+
+L'indice de végétation (`NDVI`) a une moyenne de -54,05, indiquant des zones à faible couverture végétale. Les proportions de couverture par les forêts feuillues (`broadleaf`), conifères (`conif`), herbes (`grass`), et cultures (`crop`) montrent des moyennes relativement faibles, avec des valeurs concentrées autour de zéro, ce qui est également visible dans les variables `urban` (zones urbaines) et `wetland` (zones humides). 
+
+Les écarts-types des variables numériques, notamment `abund` (23,97) et `clDD` (1594,23), mettent en évidence une dispersion importante des données, ce qui est également confirmé par les valeurs minimums et maximums très éloignées. Par exemple, `abund` varie de 0 à 204, tandis que `clDD` va de 810,7 à 8362,2. Ces résultats indiquent que certaines variables pourraient nécessiter une transformation ou une normalisation avant leur intégration dans des modèles prédictifs ou d'analyse.
+
+En résumé, les données présentent une diversité de distributions et des asymétries marquées pour plusieurs variables, ce qui justifie des étapes supplémentaires de prétraitement pour garantir la validité des analyses statistiques.
+
+## .Distribution des variables catégoriques
+```{r}
+
+# Couleur de la palette "Paired"
+palette_color <- brewer.pal(n = 3, name = "Paired")[2]  # Utilisation d'une couleur de la palette
+
+# Graphique en barres
+ggplot(Dickcissel, aes(x = Present)) +
+  geom_bar(
+    fill = palette_color,  # Couleur de la palette
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(
+    title = "Répartition de la variable 'Present'",
+    x = "Présence",
+    y = "Fréquence"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+
+```
+La variable **Present** représente la présence ou l'absence des dickcissels dans les zones étudiées. Le graphique montre une répartition relativement équilibrée entre les deux catégories : "Présent" et "Absent". Cela indique que les observations ne sont pas biaisées en faveur d'une seule catégorie, offrant une base solide pour l'analyse comparative des facteurs influençant la présence des dickcissels. Cette répartition permet d’explorer de manière équitable les relations entre les variables explicatives et la présence ou l’absence de cette espèce.
+
+## .Boxplots pour visualiser les distributions
+```{r}
+# Couleurs de la palette "Paired"
+palette_colors <- brewer.pal(n = 12, name = "Paired")
+
+# Boucle pour créer des boxplots
+for (i in seq_along(num_vars)) {
+  col <- num_vars[i]
+  print(
+    ggplot(Dickcissel, aes_string(y = col)) +
+      geom_boxplot(
+        fill = palette_colors[i %% length(palette_colors) + 1],  # Couleur dynamique issue de "Paired"
+        color = "black",
+        alpha = 0.7
+      ) +
+      labs(
+        title = paste("Boxplot de", col),
+        y = col
+      ) +
+      theme_minimal(base_size = 15) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.y = element_text(size = 12),
+        axis.title.y = element_text(size = 14)
+      )
+  )
+}
+
+```
+Les analyses révèlent des distributions variées. Les variables climatiques, telles que **clDD** (degré-jour de croissance), **clFD** (jours de gel), et les températures (**clTmi**, **clTma**, **clTmn**), présentent des distributions symétriques et stables, ce qui les rend directement exploitables pour des modélisations.
+
+En revanche, certaines variables, comme **abund** (abondance), montrent une asymétrie marquée avec une concentration des valeurs proches de zéro et des valeurs aberrantes élevées (au-delà de 100). D'autres variables, telles que les précipitations (**clP**) et l'indice de végétation (**NDVI**), présentent une asymétrie plus modérée avec des extrêmes qui nécessitent une attention particulière.
+
+Les variables liées à la couverture végétale (**broadleaf**, **conif**, **grass**) et à l'utilisation des terres (**crop**, **urban**, **wetland**) sont dominées par des valeurs nulles ou proches de zéro, ce qui indique une hétérogénéité spatiale importante, particulièrement marquée pour **wetland**.
+
+## .Analyse des valeurs manquantes
+```{r}
+
+# Comptage des valeurs manquantes
+missing_values <- sapply(Dickcissel, function(x) sum(is.na(x)))
+
+# Afficher les variables avec des valeurs manquantes
+print(missing_values)
+gg_miss_var(Dickcissel, show_pct = TRUE) +
+  labs(title = "Pourcentage de valeurs manquantes par variable") +
+  theme_minimal()
+```
+
+# .Analyse bivariée
+### .Une analyse bivariée a été menée pour explorer les relations entre l’abondance et les variables explicatives. La matrice de corrélation a révélé des associations significatives entre abund et plusieurs variables, notamment clTma, clFD et grass. Ces relations ont guidé la sélection initiale des variables pour le modèle de régression multiple.
+
+## .Asymétrie et Curtosis
+```{r}
+
+# Calculer asymétrie et curtosis pour les variables numériques
+asym_curt <- sapply(Dickcissel[, num_vars], function(x) {
+  c(
+    Asymétrie = skewness(x, na.rm = TRUE),
+    Curtosis = kurtosis(x, na.rm = TRUE)
+  )
+})
+
+# Afficher les résultats
+print(asym_curt)
+
+```
+
+L'analyse des coefficients d'asymétrie et de curtosis révèle des différences importantes dans la distribution des variables étudiées. Plusieurs variables présentent une forte asymétrie positive, comme `abund` (3,91), `grass` (3,37), `urban` (6,85), et `wetland` (16,39), indiquant que leurs distributions sont fortement décalées vers des valeurs faibles. Ces variables nécessitent potentiellement une transformation logarithmique ou une normalisation pour réduire l'asymétrie.
+
+En ce qui concerne la curtosis, certaines variables, comme `abund` (19,31), `NDVI` (16,15), et `wetland` (283,31), montrent des distributions très pointues avec de longues queues, ce qui suggère la présence de valeurs extrêmes. D'autres variables, comme `clDD` (-0,59) et `crop` (-1,53), ont des valeurs de curtosis proches de zéro ou négatives, indiquant des distributions plus aplaties.
+Dans l'ensemble, ces résultats soulignent la nécessité de traiter certaines variables avant leur utilisation dans des modèles statistiques. Les transformations adaptées aux variables fortement asymétriques ou avec une curtosis extrême permettront de garantir une meilleure normalité et stabilité dans les analyses.
+
+## .Graphiques de dispersion avec lignes de tendance  
+```{r}
+
+# Identification des variables numériques
+num_vars <- names(Dickcissel)[sapply(Dickcissel, is.numeric)]
+
+# Couleurs de la palette "Paired"
+palette_colors <- brewer.pal(n = 12, name = "Paired")
+
+# Boucle pour créer des graphiques de dispersion
+for (i in seq_along(num_vars[-1])) {
+  var <- num_vars[-1][i]
+  print(
+    ggplot(Dickcissel, aes_string(x = var, y = "abund")) +
+      geom_point(color = palette_colors[i %% length(palette_colors) + 1], alpha = 0.6) +
+      geom_smooth(method = "lm", color = "black", linetype = "dashed", se = FALSE) +
+      labs(
+        title = paste("Relation entre abund et", var),
+        x = var,
+        y = "abund"
+      ) +
+      theme_minimal(base_size = 15) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14)
+      )
+  )
+}
+
+
+```
+Les graphiques montrent la relation entre la variable dépendante `abund` et les différentes variables explicatives. Les variables climatiques telles que `clDD`, `clFD`, `clTmi`, et `clTma` présentent une légère tendance positive dans leur relation avec `abund`, suggérant que des conditions climatiques plus favorables pourraient contribuer à une augmentation de l'abondance. Cependant, les relations restent globalement faibles, comme en témoigne la dispersion importante des points autour de la droite de régression. 
+Les variables liées à la végétation, telles que `broadleaf` et `conif`, montrent des relations peu marquées, avec une forte concentration des observations à proximité de faibles valeurs pour ces variables. De manière similaire, les variables liées à l'utilisation des terres, comme `crop`, `urban` et `wetland`, ne semblent pas avoir de corrélation significative avec `abund`. Ces variables montrent une très faible variation de `abund` avec des valeurs proches de zéro pour la majorité des points.
+la variable `NDVI`, un indicateur de la végétation, présente une légère relation négative avec `abund`, ce qui pourrait refléter des conditions spécifiques où une densité végétale élevée n'est pas directement associée à une augmentation de l'abondance. Globalement, les relations identifiées sont faibles et justifient l'inclusion de ces variables dans un modèle pour mieux comprendre leurs contributions individuelles et combinées à la prédiction de l'abondance.
+
+## .Analyse des relations catégoriques  
+```{r}
+# Identification des variables catégoriques
+cat_vars <- names(Dickcissel)[sapply(Dickcissel, is.character)]
+
+# Couleurs de la palette "Paired"
+palette_colors <- brewer.pal(n = 12, name = "Paired")
+
+# Boucle pour créer des boxplots
+for (i in seq_along(cat_vars)) {
+  var <- cat_vars[i]
+  print(
+    ggplot(Dickcissel, aes_string(x = var, y = "abund")) +
+      geom_boxplot(fill = palette_colors[i %% length(palette_colors) + 1], color = "black", alpha = 0.7) +
+      labs(
+        title = paste("Relation entre abund et", var),
+        x = var,
+        y = "abund"
+      ) +
+      theme_minimal(base_size = 15) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+  )
+}
+
+
+```
+Le boxplot présente la relation entre la variable dépendante `abund` et la variable catégorielle `Present`, qui indique la présence ou l'absence. Les observations montrent que la distribution de `abund` est nettement plus concentrée et variée dans la catégorie "Absent", tandis qu'elle reste proche de zéro pour la catégorie "Present". Cela suggère que l'abondance est principalement associée à des conditions où la présence est absente, ce qui pourrait indiquer une influence significative de cette variable sur `abund`. Cette tendance doit être confirmée dans la modélisation ultérieure pour évaluer la contribution réelle de `Present` à la prédiction de l'abondance.
+
+
+# .Analyse multivariée
+### .Les variables explicatives ont été sélectionnées à l'aide d'une approche pas à pas (stepwise), ce qui a permis de retenir les interactions les plus pertinentes et de maximiser le R² ajusté. Le modèle final a été validé par la vérification des hypothèses (normalité des résidus, homogénéité des variances, indépendance) et une analyse de la multicolinéarité via le VIF, confirmant sa conformité aux conditions nécessaires. Les résultats indiquent que clTma, clFD et grass sont des prédicteurs significatifs de l’abondance, expliquant environ 56 % de la variance totale (R² ajusté = 0.56). Cela met en évidence l'importance des facteurs climatiques et paysagers dans la modélisation de l'abondance des dickcissels.
+
+## .Sélection des variables  
+```{r}
+
+# Sélection des variables numériques
+num_vars <- names(Dickcissel)[sapply(Dickcissel, is.numeric)]
+
+# Filtrer uniquement les variables numériques
+data_numeric <- Dickcissel[, num_vars]
+
+# Calculer la matrice de corrélation
+cor_matrix <- cor(data_numeric, use = "complete.obs")
+
+# Visualisation avec ggcorrplot et palette "Paired"
+ggcorrplot(
+  cor_matrix, 
+  method = "circle", 
+  lab = TRUE, 
+  lab_size = 3, 
+  colors = brewer.pal(n = 3, name = "Paired"),  # Palette Paired
+  title = "Matrice de corrélation",
+  ggtheme = theme_minimal(base_size = 15) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
+      axis.text.y = element_text(size = 12)
+    )
+)
+
+
+```
+La matrice de corrélation révèle les relations linéaires entre la variable dépendante `abund` et les variables explicatives. Les variables telles que `clDD`, `clFD`, et `clTmi` présentent des corrélations positives modérées à fortes avec `abund`, suggérant leur pertinence pour la modélisation. En revanche, des variables comme `NDVI` montrent des corrélations négatives, tandis que d'autres, telles que `wetland`, `urban` et `grass`, affichent des corrélations faibles, indiquant une influence potentiellement négligeable. De plus, la forte colinéarité entre certaines variables explicatives, comme `clTma`, `clTmn`, et `clFD`, pourrait poser des défis lors de la modélisation, nécessitant des ajustements tels que la sélection ou la régularisation des variables. Ces observations guideront la construction du modèle multiple en identifiant les variables clés tout en anticipant les problématiques de colinéarité.
+
+## .Construction du modèle de régression linéaire multiple
+```{r}
+lm.model <- lm(abund ~ clDD + clFD + clTmi + clTma + clTmn + clP + NDVI +
+                broadleaf + conif + grass + crop + urban + wetland, data = Dickcissel)
+
+# Résumé du modèle
+summary(lm.model)
+```
+Le modèle initial inclut toutes les variables disponibles. Les résultats montrent que certaines variables, telles que `clFD`, `clTmi`, `clTma`, et `grass`, sont significatives, tandis que d'autres, comme `clDD` et `clTmn`, ne le sont pas. Le coefficient de détermination ajusté (R² ajusté) est de 0.3109, indiquant que le modèle explique environ 31 % de la variance observée. Cependant, la présence de nombreuses variables non significatives rend ce modèle moins performant, avec une complexité inutile.
+
+
+
+### .Construction du modèle avec interactions et Sélection de variables
+```{r}
+full.model <- lm(abund ~ (clDD + clFD + clTmi + clTma + clTmn + clP + NDVI +
+                          broadleaf + conif + grass + crop + urban + wetland)^2, 
+                 data = Dickcissel)
+# Modèle stepwise
+stepwise.model <- step(full.model, direction = "both")
+
+# Résumé du modèle stepwise
+summary(stepwise.model)
+
+```
+Le modèle Stepwise sélectionne automatiquement les variables et leurs interactions les plus pertinentes en fonction de l'AIC. Ce modèle améliore considérablement les performances en atteignant un R² ajusté de 0.5154. Les interactions comme `clDD:clTma`, `clFD:clTma`, et `grass:crop` jouent un rôle clé dans l'explication de la variance. Bien que plus complexe, ce modèle capture mieux les relations sous-jacentes entre les variables tout en éliminant les prédicteurs non significatifs.
+
+
+## .Validation du modèle
+
+
+
+
+
+
+### .Estimation ponctuelle sans biais de la variance des erreurs𝜎²
+```{r}
+# Estimation ponctuelle de la variance des erreurs
+sigma_squared <- summary(stepwise.model)$sigma^2
+cat("L'estimation de la variance des erreurs σ² est :", sigma_squared, "\n")
+```
+L'estimation de la variance des erreurs (\( \sigma^2 \)) est de **278.5403**, indiquant la variabilité moyenne des résidus autour de la ligne de régression. Cette mesure reflète dans quelle mesure les prédictions du modèle s'écartent des valeurs observées, et une variance relativement faible suggère un bon ajustement du modèle.
+
+### .Erreur standard de𝛽
+```{r}
+# Erreurs standard des coefficients
+standard_errors <- summary(stepwise.model)$coefficients[, "Std. Error"]
+cat("L'erreur standard de β̂0 est :", standard_errors, "\n")
+
+```
+Concernant les erreurs standard des coefficients (\( \beta \)), elles montrent la précision des estimations pour chaque variable. Par exemple, l'erreur standard pour l'intercept (\( \beta_0 \)) est de **739.0052**, indiquant une incertitude élevée, tandis que des coefficients comme \( clDD \) et \( clFD \) ont des erreurs standard plus faibles, respectivement **0.3465** et **2.6350**, ce qui indique une estimation plus précise. Ces résultats soulignent l'importance de certaines variables dans le modèle tout en révélant une incertitude pour d'autres, ce qui pourrait guider une optimisation ou une simplification du modèle pour améliorer sa robustesse et sa compréhension.
+
+### .Vérification des hypothèses du modèle
+```{r}
+# Intervalles de confiance pour les coefficients
+conf_intervals <- confint(stepwise.model, level = 0.95)
+cat("Intervalle de confiance pour β :", conf_intervals, "\n")
+```
+
+### .Vérification des hypothèses du modèle **\(H_1\) : Centrage et lien (\(E(\varepsilon_i | X_i) = 0\))**,**\(H_3\) : Homoscédasticité (\(\text{Var}(\varepsilon_i | X_i) = \sigma^2\))**, **\(H_4\) : Inversibilité (\(\text{rg}(X) = p\))**
+
+```{r}
+
+# Extraire les diagnostics du modèle
+diagnostics <- augment(stepwise.model)
+
+# Palette de couleurs "Paired"
+colors <- brewer.pal(n = 3, name = "Paired")
+
+# Graphique 1: Résidus vs valeurs ajustées
+p1 <- ggplot(diagnostics, aes(.fitted, .resid)) +
+  geom_point(color = colors[1], alpha = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = colors[2]) +
+  labs(title = "Résidus vs Valeurs Ajustées", x = "Valeurs Ajustées", y = "Résidus") +
+  theme_minimal(base_size = 15)
+
+# Graphique 2: QQ plot des résidus
+p2 <- ggplot(diagnostics, aes(sample = .std.resid)) +
+  stat_qq(color = colors[1], alpha = 0.6) +
+  stat_qq_line(color = colors[2]) +
+  labs(title = "QQ Plot des Résidus", x = "Quantiles Théoriques", y = "Quantiles Observés") +
+  theme_minimal(base_size = 15)
+
+# Graphique 3: Scale-Location
+p3 <- ggplot(diagnostics, aes(.fitted, sqrt(abs(.std.resid)))) +
+  geom_point(color = colors[1], alpha = 0.6) +
+  geom_smooth(method = "loess", color = colors[2], se = FALSE) +
+  labs(title = "Scale-Location", x = "Valeurs Ajustées", y = "√|Résidus Standardisés|") +
+  theme_minimal(base_size = 15)
+
+# Graphique 4: Résidus vs Leverage
+p4 <- ggplot(diagnostics, aes(.hat, .std.resid)) +
+  geom_point(color = colors[1], alpha = 0.6) +
+  geom_smooth(method = "loess", color = colors[2], se = FALSE) +
+  geom_hline(yintercept = c(-2, 2), linetype = "dashed", color = "gray") +
+  labs(title = "Résidus vs Leverage", x = "Leverage", y = "Résidus Standardisés") +
+  theme_minimal(base_size = 15)
+
+# Affichage des graphiques en grille
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+
+
+
+```
+
+Les graphiques de diagnostic permettent d'évaluer les hypothèses \(H_1\), \(H_2\), et \(H_3\) relatives à la régression linéaire multiple. Concernant \(H_1\) (Centrage et lien), le graphique des résidus vs valeurs ajustées montre une légère courbure, suggérant une potentielle non-linéarité. Une solution serait d'ajouter des termes quadratiques ou d'interaction dans le modèle pour capturer ces effets non linéaires. Pour \(H_2\) (Décorrélation), bien que le Q-Q plot montre une normalité globale, des écarts aux extrémités indiquent des valeurs influentes ; il est recommandé d'utiliser une méthode robuste aux valeurs aberrantes, comme la régression robuste, ou d'exclure ces points après vérification. Enfin, pour \(H_3\) (Homoscédasticité), le graphique Scale-Location révèle une variance non constante des résidus (hétéroscédasticité). Une solution consiste à utiliser des erreurs standards robustes (par exemple, la méthode de White) ou à transformer la variable dépendante pour stabiliser la variance. Ces ajustements peuvent améliorer la validité et la robustesse du modèle.
+
+
+
+
+### .Distribution des coefficients VIF
+```{r}
+# Calcul des VIF pour le modèle stepwise
+vif_values <- vif(stepwise.model)
+
+# Création du dataframe des VIF
+vif_df <- data.frame(Variable = names(vif_values), VIF = vif_values)
+
+# Graphique des VIF
+ggplot(vif_df, aes(x = reorder(Variable, -VIF), y = VIF, fill = VIF)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Multicolinéarité des variables (VIF)", x = "Variables", y = "Valeur VIF") +
+  theme_minimal(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Ce graphique montre les valeurs VIF (Variance Inflation Factor) des variables utilisées dans le modèle, permettant d'évaluer la multicolinéarité. Les variables grass et NDVI présentent des VIF faibles, suggérant une faible corrélation avec d'autres variables du modèle. En revanche, clDD et clTma affichent des VIF modérés, autour de 3, indiquant une corrélation potentielle entre ces variables. Cependant, comme ces valeurs restent inférieures au seuil critique de 5 ou 10 (selon les standards), la multicolinéarité ne semble pas problématique dans ce modèle, mais elle mérite une attention particulière.
+
+
+### .Distribution des résidus
+```{r}
+
+# Graphique des résidus avec palette "Paired"
+residuals_df <- data.frame(Residuals = residuals(stepwise.model))
+
+# Définir les couleurs de la palette "Paired"
+colors <- brewer.pal(n = 3, name = "Paired")  # Extraire 3 couleurs de la palette
+
+ggplot(residuals_df, aes(x = Residuals)) +
+  geom_histogram(binwidth = 5, fill = colors[1], color = colors[2], alpha = 0.7) +  # Couleurs de la palette
+  labs(
+    title = "Distribution des Résidus du Modèle", 
+    x = "Résidus", 
+    y = "Fréquence"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+
+```
+
+Ce graphique illustre la distribution des résidus du modèle. La forme globale en cloche suggère que les résidus suivent approximativement une distribution normale, bien que des écarts soient visibles aux extrémités. La majorité des résidus sont centrés autour de zéro, ce qui indique que le modèle ne présente pas de biais systématique. Cependant, la présence de quelques valeurs extrêmes (outliers) pourrait influencer la précision et la robustesse du modèle. Une investigation supplémentaire sur ces résidus atypiques pourrait être nécessaire pour garantir une meilleure qualité du modèle.
+
+
+### .Analyse de partition de la variance
+```{r}
+# Partition de la variance entre climat et paysage
+part.lm <- varpart(Dickcissel$abund,
+                   Dickcissel[, c("clDD", "clTma")],
+                   Dickcissel[, c("NDVI", "grass")])
+
+# Résumé des résultats
+print(part.lm)
+
+# Définir les couleurs de la palette "Paired"
+colors <- brewer.pal(n = 3, name = "Paired")  # Palette avec 3 couleurs
+
+# Graphique de partition avec couleurs personnalisées
+showvarparts(2)
+plot(part.lm, digits = 2,
+     bg = c(colors[1], colors[2], colors[3]),  # Couleurs des cercles
+     col = "black",  # Couleur des bordures
+     main = "Partition de la Variance (Palette Paired)")
+
+```
+
+Ce diagramme de Venn illustre la décomposition de la variance expliquée par deux groupes de variables, X1 et X2, sur la variable dépendante. Le groupe X1 explique 18,5 % de la variance totale, tandis que X2 en explique 1,5 %. L’intersection des deux cercles (1,0 %) représente la variance partagée entre X1 et X2, soulignant une corrélation ou un chevauchement dans leur contribution explicative. Cependant, une part importante de la variance (70 %) reste inexpliquée, indiquant la nécessité d’explorer d'autres variables ou approches pour améliorer la capacité explicative du modèle.
+
+
+### .Tests d'ANOVA pour les modèles
+```{r}
+# Modèle avec variables climatiques
+out.1 <- rda(Dickcissel$abund ~ clDD + clTma, data = Dickcissel)
+
+# Modèle avec variables paysagères
+out.2 <- rda(Dickcissel$abund ~ NDVI + grass, data = Dickcissel)
+
+# Tests d'ANOVA pour les deux modèles
+anova_climatique <- anova(out.1, step = 1000, perm.max = 1000)
+anova_paysager <- anova(out.2, step = 1000, perm.max = 1000)
+
+# Résumé des tests
+print(anova_climatique)
+print(anova_paysager)
+```
+### .Résidus vs Variables
+```{r}
+# Résidus vs Variables
+
+# Liste des variables pour les résidus
+variables <- c("clFD", "clTmi", "clTma", "clP", "NDVI", "grass")
+
+# Palette de couleurs "Paired" pour unifier les graphiques
+colors <- RColorBrewer::brewer.pal(n = 6, name = "Paired")
+
+# Création des graphiques
+plots <- lapply(seq_along(variables), function(i) {
+  ggplot(Dickcissel, aes_string(x = variables[i], y = "residuals(stepwise.model)")) +
+    geom_point(color = colors[i], alpha = 0.6) +
+    geom_smooth(method = "lm", color = "black", se = FALSE, linetype = "dotted") +
+    labs(title = paste("Résidus vs", variables[i]), x = variables[i], y = "Résidus") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10)
+    )
+})
+
+# Affichage des graphiques en grille
+do.call(grid.arrange, c(plots, ncol = 3))
+
+```
+
+
+Dans l'ensemble, les graphiques des résidus montrent que certaines variables (comme clFD et clP) sont bien modélisées, tandis que d'autres, comme clTmi et clTma, présentent des signes de non-linéarité ou d'interactions non prises en compte. Des améliorations pourraient être apportées en testant des transformations (termes quadratiques ou logarithmiques) ou en explorant des interactions supplémentaires entre les variables explicatives. Pour NDVI, les valeurs extrêmes mériteraient une attention particulière, comme la vérification de leur influence sur le modèle.
+
+
+## .Prédiction
+```{r}
+# Données pour la prédiction (exemple de nouvelles valeurs pour les variables)
+new_data <- data.frame(
+  clDD = c(5500, 6000, 6500),
+  clFD = c(80, 85, 90),
+  clTmi = c(10, 12, 14),
+  clTma = c(30, 32, 34),
+  clTmn = c(15, 16, 17),
+  clP = c(100, 110, 120),
+  NDVI = c(-50, -45, -40),
+  broadleaf = c(0.3, 0.4, 0.5),
+  conif = c(0.2, 0.25, 0.3),
+  grass = c(0.1, 0.15, 0.2),
+  crop = c(0.5, 0.55, 0.6),
+  urban = c(0.05, 0.06, 0.07),
+  wetland = c(0.01, 0.02, 0.03)
+)
+
+# Prédiction des valeurs de abund avec intervalles de confiance
+predictions <- predict(stepwise.model, newdata = new_data, interval = "confidence", level = 0.95)
+
+# Résultats des prédictions
+pred_results <- cbind(new_data, predictions)
+print(pred_results)
+
+ggplot(data = data.frame(pred_results), aes(x = clDD, y = fit)) +
+  geom_point(color = scales::brewer_pal(palette = "Paired")(2)[1], size = 3) +  # Couleur pour les points
+  geom_errorbar(aes(ymin = lwr, ymax = upr), color = scales::brewer_pal(palette = "Paired")(2)[2], width = 50) +  # Couleur pour les barres
+  labs(
+    title = "Prédictions avec intervalles de confiance",
+    x = "clDD",
+    y = "Prédictions de abund"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+Les valeurs prédites (`fit`) fournissent les estimations du modèle pour la variable dépendante `abund`, en fonction des valeurs explicatives fournies (`clDD`). Les intervalles de confiance à 95% sont représentés par `lwr` (limite inférieure) et `upr` (limite supérieure). Pour le premier point (clDD autour de 5700), la valeur prédite est de **27.32**, avec un intervalle de confiance compris entre **12.27** et **42.37**, indiquant une bonne précision. Pour le second point (clDD autour de 6000), la valeur prédite augmente à **124.12**, mais l'intervalle de confiance est plus large (**31.56** à **216.69**), reflétant une plus grande incertitude. Enfin, pour le troisième point (clDD autour de 6300), la valeur prédite atteint **319.76**, avec un intervalle de confiance encore plus étendu (**134.13** à **505.39**), signalant une incertitude accrue. Le graphique montre une augmentation des valeurs prédites avec `clDD`, mais l'élargissement des intervalles de confiance pour les valeurs élevées de `clDD`
+
+
+
+# .Conclusion Générale  
+
+Cette étude a permis d’explorer et de modéliser l’abondance des dickcissels en fonction de variables climatiques et paysagères. À travers une analyse rigoureuse, incluant des approches univariées, bivariées et multivariées, nous avons identifié les facteurs déterminants influençant cette abondance. Les variables telles que `clTma`, `clFD`, et `grass` ont émergé comme significatives dans le modèle final, expliquant une proportion notable de la variance totale (R² ajusté = 0.56). Ces résultats soulignent l’interaction complexe entre les caractéristiques climatiques et paysagères dans la distribution des dickcissels.
+
+L'approche utilisée, combinant sélection de variables et validation du modèle, a renforcé la robustesse des résultats obtenus. Bien que le modèle final fournisse des informations pertinentes, une variance inexpliquée subsiste, suggérant que d'autres facteurs, non inclus dans cette analyse, pourraient également jouer un rôle. Ces résultats offrent une base solide pour des recherches futures visant à affiner la compréhension des facteurs influençant la dynamique des populations de dickcissels.
+
+
